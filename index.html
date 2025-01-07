@@ -163,45 +163,84 @@
      * 3) RENDERING THE BOARD (DRAG & DROP SETUP)
      ************************************************************************/
     function renderBoard() {
-      chessboardEl.innerHTML = "";
-      for (let row = 0; row < 8; row++) {
-        const rowContainer = document.createElement("div");
-        rowContainer.classList.add("row");
-        for (let col = 0; col < 8; col++) {
-          const cell = document.createElement("div");
-          cell.classList.add("cell");
-          cell.dataset.row = row;
-          cell.dataset.col = col;
-          // Color squares
-          if ((row + col) % 2 === 0) {
-            cell.classList.add("light");
-          } else {
-            cell.classList.add("dark");
-          }
-          // If there's a piece
-          const piece = board[row][col];
-          if (piece !== ".") {
-            const pieceDiv = document.createElement("div");
-            pieceDiv.classList.add("piece");
-            if (isWhitePiece(piece)) {
-              pieceDiv.classList.add("white-piece");
-            } else {
-              pieceDiv.classList.add("black-piece");
-            }
-            pieceDiv.textContent = piece;
-            // Make it draggable
-            pieceDiv.setAttribute("draggable", "true");
-            pieceDiv.addEventListener("dragstart", onDragStart);
-            cell.appendChild(pieceDiv);
-          }
-          // Setup dragover / drop on cells
-          cell.addEventListener("dragover", onDragOver);
-          cell.addEventListener("drop", onDrop);
-          rowContainer.appendChild(cell);
-        }
-        chessboardEl.appendChild(rowContainer);
+  chessboardEl.innerHTML = "";
+  for (let row = 0; row < 8; row++) {
+    // We keep the row container logic
+    const rowContainer = document.createElement("div");
+    rowContainer.classList.add("row");
+
+    for (let col = 0; col < 8; col++) {
+      const cell = document.createElement("div");
+      cell.classList.add("cell");
+      cell.dataset.row = row;
+      cell.dataset.col = col;
+
+      // Color squares (light/dark)
+      if ((row + col) % 2 === 0) {
+        cell.classList.add("light");
+      } else {
+        cell.classList.add("dark");
       }
+
+      // If there's a piece in board[row][col]
+      const piece = board[row][col];
+      if (piece !== ".") {
+        // Create a container div for the piece
+        const pieceDiv = document.createElement("div");
+        pieceDiv.classList.add("piece");
+
+        // White vs black coloring
+        // (If you still want the text coloring or background, you can keep this,
+        //  but the actual text will be replaced by an <img> now.)
+        if (isWhitePiece(piece)) {
+          pieceDiv.classList.add("white-piece");
+        } else {
+          pieceDiv.classList.add("black-piece");
+        }
+
+        // Create the <img> for the piece
+        const imgElement = document.createElement("img");
+        imgElement.src = getPieceImage(piece); 
+        // Optionally, add a class for styling, e.g.:
+        // imgElement.classList.add("piece-image");
+
+        // Append the image into the pieceDiv
+        pieceDiv.appendChild(imgElement);
+
+        // Make the pieceDiv draggable so we can move it around
+        pieceDiv.setAttribute("draggable", "true");
+        pieceDiv.addEventListener("dragstart", onDragStart);
+
+        // Place the pieceDiv inside the cell
+        cell.appendChild(pieceDiv);
+      }
+
+      // Setup drag/drop on cells
+      cell.addEventListener("dragover", onDragOver);
+      cell.addEventListener("drop", onDrop);
+
+      rowContainer.appendChild(cell);
     }
+
+    chessboardEl.appendChild(rowContainer);
+  }
+}
+function getPieceImage(piece) {
+  const isWhite = (piece === piece.toUpperCase());
+  const pieceLetter = piece.toUpperCase(); // e.g., 'P' for a pawn
+
+  const colorStr = isWhite ? "white" : "black";
+  switch (pieceLetter) {
+    case "P": return `img/${colorStr}_pawn.png`;
+    case "R": return `img/${colorStr}_rook.png`;
+    case "N": return `img/${colorStr}_knight.png`;
+    case "B": return `img/${colorStr}_bishop.png`;
+    case "Q": return `img/${colorStr}_queen.png`;
+    case "K": return `img/${colorStr}_king.png`;
+    default:  return ""; // fallback in case we have something else
+  }
+}
+
 
     /************************************************************************
      * 4) DRAG & DROP EVENTS
