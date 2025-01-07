@@ -2,54 +2,356 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Chessboard Test</title>
-
-  <!-- Chessboard.js CSS from CDN -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
-
+  <title>Drag & Drop Chess</title>
   <style>
-    /* Simple styling */
     body {
       margin: 0;
       padding: 0;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-      background: #f0f0f0;
+      font-family: sans-serif;
+      text-align: center;
+      background: #f4f4f4;
     }
-    #board {
-      width: 400px;
-      margin: 20px;
+
+    h1 {
+      margin-top: 20px;
+    }
+
+    #chessboard {
+      display: inline-block;
+      border: 3px solid #333;
+      border-collapse: collapse;
+      user-select: none;
+    }
+
+    /* Each cell of the chessboard */
+    .cell {
+      width: 60px;
+      height: 60px;
+      text-align: center;
+      vertical-align: middle;
+      border: 1px solid #333;
+      position: relative; /* so the piece can be absolutely positioned if needed */
+    }
+
+    /* Light and dark squares */
+    .light {
+      background-color: #f0d9b5;
+    }
+
+    .dark {
+      background-color: #b58863;
+    }
+
+    /* Piece container */
+    .piece {
+      width: 100%;
+      height: 100%;
+      line-height: 60px; /* vertically center text inside the cell */
+      font-size: 34px;
+      cursor: move;
+    }
+
+    /* White piece styling: uppercase letters in white text */
+    .white-piece {
+      color: #fff;
+    }
+
+    /* Black piece styling: lowercase letters in black text */
+    .black-piece {
+      color: #000;
+    }
+
+    #status {
+      margin: 20px 0;
+      font-weight: bold;
+      min-height: 1em;
     }
   </style>
 </head>
 <body>
-  <!-- The container for the chessboard -->
-  <div id="board"></div>
-
-  <!-- Chess.js (Handles chess logic) -->
-  <script src="https://cdn.jsdelivr.net/npm/chess.js@0.12.0/chess.js"></script>
-
-  <!-- Chessboard.js (Displays & drags pieces) -->
-  <script src="https://cdn.jsdelivr.net/npm/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+  <h1>Drag & Drop Chess ♟️</h1>
+  <div id="chessboard"></div>
+  <div id="status"></div>
 
   <script>
-    // Initialize the Chess logic
-    const game = new Chess();
+    /*************************************************************
+     * 1) CHESS LOGIC
+     *    Same minimal rules as before. We track the board in
+     *    a 2D array and do basic move validation for each piece.
+     *************************************************************/
+    let board = [
+      ["r", "n", "b", "q", "k", "b", "n", "r"],
+      ["p", "p", "p", "p", "p", "p", "p", "p"],
+      [".", ".", ".", ".", ".", ".", ".", "."],
+      [".", ".", ".", ".", ".", ".", ".", "."],
+      [".", ".", ".", ".", ".", ".", ".", "."],
+      [".", ".", ".", ".", ".", ".", ".", "."],
+      ["P", "P", "P", "P", "P", "P", "P", "P"],
+      ["R", "N", "B", "Q", "K", "B", "N", "R"]
+    ];
 
-    // Initialize the Chessboard
-    const board = Chessboard('board', {
-      draggable: true,
-      position: 'start',
-      onDrop: (source, target) => {
-        const move = game.move({ from: source, to: target });
-        if (move === null) {
-          // illegal move => snap back
-          return 'snapback';
+    let currentPlayer = "White";
+
+    function isOpponentPiece(piece, target) {
+      if (piece === "." || target === ".") return false;
+      const isWhitePiece = piece === piece.toUpperCase();
+      const isWhiteTarget = target === target.toUpperCase();
+      // Opponent if they're different in case
+      return isWhitePiece !== isWhiteTarget;
+    }
+
+    function inBounds(r, c) {
+      return r >= 0 && r < 8 && c >= 0 && c < 8;
+    }
+
+    // Basic movement validation (same as before).
+    function moveIsLegal(sr, sc, er, ec) {
+      const piece = board[sr][sc];
+      if (!piece || piece === ".") return false;
+
+      const endPiece = board[er][ec];
+      // If end square is our own piece
+      if (endPiece !== "." && !isOpponentPiece(piece, endPiece)) {
+        return false;
+      }
+
+      const pieceType = piece.toUpperCase();
+      const rowDiff = er - sr;
+      const colDiff = ec - sc;
+      const rowAbs = Math.abs(rowDiff);
+      const colAbs = Math.abs(colDiff);
+
+      // Pawn
+      if (pieceType === "P") {
+        const direction = piece === piece.toUpperCase() ? -1 : 1;
+        // capture
+        if (isOpponentPiece(piece, endPiece)) {
+          if (rowDiff === direction && colAbs === 1) return true;
+          return false;
+        } else {
+          // forward
+          if (colDiff === 0 && endPiece === ".") {
+            // first double move
+            const startRow = piece === piece.toUpperCase() ? 6 : 1;
+            if (sr === startRow && rowDiff === 2 * direction) {
+              const mid = sr + direction;
+              if (board[mid][sc] === "." && board[er][ec] === ".") {
+                return true;
+              }
+            }
+            // normal move
+            if (rowDiff === direction) {
+              return true;
+            }
+          }
+          return false;
         }
       }
-    });
+
+      // Rook
+      if (pieceType === "R") {
+        if (rowDiff === 0 || colDiff === 0) {
+          let stepR = rowDiff === 0 ? 0 : rowDiff / rowAbs;
+          let stepC = colDiff === 0 ? 0 : colDiff / colAbs;
+          let r = sr + stepR, c = sc + stepC;
+          while (r !== er || c !== ec) {
+            if (board[r][c] !== ".") return false;
+            r += stepR;
+            c += stepC;
+          }
+          return true;
+        }
+        return false;
+      }
+
+      // Knight
+      if (pieceType === "N") {
+        if ((rowAbs === 2 && colAbs === 1) || (rowAbs === 1 && colAbs === 2)) {
+          return true;
+        }
+        return false;
+      }
+
+      // Bishop
+      if (pieceType === "B") {
+        if (rowAbs === colAbs) {
+          let stepR = rowDiff > 0 ? 1 : -1;
+          let stepC = colDiff > 0 ? 1 : -1;
+          let r = sr + stepR, c = sc + stepC;
+          while (r !== er || c !== ec) {
+            if (board[r][c] !== ".") return false;
+            r += stepR;
+            c += stepC;
+          }
+          return true;
+        }
+        return false;
+      }
+
+      // Queen
+      if (pieceType === "Q") {
+        if (rowAbs === colAbs || rowDiff === 0 || colDiff === 0) {
+          let stepR = rowDiff === 0 ? 0 : rowDiff / rowAbs;
+          let stepC = colDiff === 0 ? 0 : colDiff / colAbs;
+          let r = sr + stepR, c = sc + stepC;
+          while (r !== er || c !== ec) {
+            if (board[r][c] !== ".") return false;
+            r += stepR;
+            c += stepC;
+          }
+          return true;
+        }
+        return false;
+      }
+
+      // King
+      if (pieceType === "K") {
+        if (rowAbs <= 1 && colAbs <= 1) {
+          return true;
+        }
+        return false;
+      }
+
+      return false;
+    }
+
+    /*************************************************************
+     * 2) RENDERING THE BOARD
+     *************************************************************/
+    const chessboard = document.getElementById("chessboard");
+
+    function renderBoard() {
+      chessboard.innerHTML = "";
+      for (let row = 0; row < 8; row++) {
+        const rowDiv = document.createElement("div");
+        rowDiv.style.display = "flex";
+        for (let col = 0; col < 8; col++) {
+          const cell = document.createElement("div");
+          cell.classList.add("cell");
+          cell.dataset.row = row;
+          cell.dataset.col = col;
+
+          // color the cell
+          if ((row + col) % 2 === 0) {
+            cell.classList.add("light");
+          } else {
+            cell.classList.add("dark");
+          }
+
+          // If there's a piece
+          const piece = board[row][col];
+          if (piece !== ".") {
+            const pieceDiv = document.createElement("div");
+            pieceDiv.classList.add("piece");
+            // White piece => uppercase => white text
+            if (piece === piece.toUpperCase()) {
+              pieceDiv.classList.add("white-piece");
+            } else {
+              pieceDiv.classList.add("black-piece");
+            }
+
+            pieceDiv.textContent = piece;
+            // Make it draggable
+            pieceDiv.setAttribute("draggable", "true");
+
+            // Attach drag handlers
+            pieceDiv.addEventListener("dragstart", onDragStart);
+            // optional: pieceDiv.addEventListener("dragend", onDragEnd);
+
+            cell.appendChild(pieceDiv);
+          }
+
+          // Attach drop handlers to the cell
+          cell.addEventListener("dragover", onDragOver);
+          cell.addEventListener("drop", onDrop);
+
+          rowDiv.appendChild(cell);
+        }
+        chessboard.appendChild(rowDiv);
+      }
+    }
+
+    // We'll store the position from where we started dragging.
+    let dragSource = null;
+
+    function onDragStart(event) {
+      // The piece’s row/col is the same as the parent cell’s dataset
+      const parentCell = event.target.parentNode;
+      const sr = parentCell.dataset.row;
+      const sc = parentCell.dataset.col;
+
+      // We'll store the source info in a transfer
+      event.dataTransfer.setData("text/plain", JSON.stringify({ sr, sc }));
+      dragSource = { sr, sc };
+    }
+
+    function onDragOver(event) {
+      // By default, dropping is not allowed. Prevent default to enable drop.
+      event.preventDefault();
+    }
+
+    function onDrop(event) {
+      event.preventDefault();
+
+      if (!dragSource) return;
+
+      // Where are we dropping?
+      const targetCell = event.currentTarget;
+      const er = targetCell.dataset.row;
+      const ec = targetCell.dataset.col;
+
+      // Retrieve the source row/col from the dataTransfer
+      const data = event.dataTransfer.getData("text/plain");
+      const { sr, sc } = JSON.parse(data);
+
+      // If dropping in the same spot, ignore
+      if (sr == er && sc == ec) {
+        updateStatus("Cancelled move.");
+        return;
+      }
+
+      // Check if the piece belongs to current player
+      const piece = board[sr][sc];
+      const pieceIsWhite = piece === piece.toUpperCase();
+      if (currentPlayer === "White" && !pieceIsWhite) {
+        updateStatus("That's not your piece, White!");
+        return;
+      }
+      if (currentPlayer === "Black" && pieceIsWhite) {
+        updateStatus("That's not your piece, Black!");
+        return;
+      }
+
+      // Validate move
+      if (moveIsLegal(parseInt(sr), parseInt(sc), parseInt(er), parseInt(ec))) {
+        // Make the move
+        board[er][ec] = piece;
+        board[sr][sc] = ".";
+        renderBoard();
+        switchPlayer();
+      } else {
+        updateStatus("Illegal move. Try again!");
+      }
+
+      dragSource = null;
+    }
+
+    /*************************************************************
+     * 3) MANAGING TURNS & STATUS
+     *************************************************************/
+    const statusDiv = document.getElementById("status");
+    function updateStatus(msg) {
+      statusDiv.textContent = msg;
+    }
+
+    function switchPlayer() {
+      currentPlayer = currentPlayer === "White" ? "Black" : "White";
+      updateStatus(currentPlayer + "'s turn!");
+    }
+
+    // Initialize
+    renderBoard();
+    updateStatus(currentPlayer + "'s turn!");
   </script>
 </body>
 </html>
