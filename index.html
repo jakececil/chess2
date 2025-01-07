@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Chess with Cards</title>
+
+  <!-- Chessboard.js + Chess.js via CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/css/chessboard.min.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/js/chessboard.min.js"></script>
+
+  <style>
+    /* Basic page styling */
+    body {
+      margin: 0; 
+      padding: 0;
+      font-family: Arial, sans-serif;
+      background-color: #f0f0f0;
+      display: flex; 
+      justify-content: center; 
+      align-items: center;
+      min-height: 100vh;
+    }
+    #game-container {
+      display: flex; 
+      gap: 20px;
+      padding: 20px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    #board {
+      width: 400px; 
+      max-width: 50vw;
+    }
+    #card-container {
+      display: flex; 
+      flex-direction: column; 
+      gap: 20px;
+    }
+    .card-hand {
+      display: flex; 
+      gap: 10px; 
+      flex-wrap: wrap;
+    }
+    .card {
+      width: 100px; 
+      height: 150px; 
+      background-color: #fff; 
+      border: 2px solid #000;
+      border-radius: 8px; 
+      display: flex; 
+      justify-content: center; 
+      align-items: center; 
+      font-weight: bold; 
+      font-size: 0.9rem;
+      text-align: center;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .card:hover {
+      transform: scale(1.05);
+      background-color: #fafafa;
+    }
+    button {
+      padding: 8px 16px; 
+      cursor: pointer; 
+      font-size: 1rem;
+      border: 2px solid #666; 
+      background-color: #fff; 
+      border-radius: 4px;
+      transition: background-color 0.2s, transform 0.2s;
+    }
+    button:hover {
+      background-color: #eee; 
+      transform: scale(1.03);
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <!-- Chess Board -->
+    <div id="board"></div>
+
+    <!-- Card UI -->
+    <div id="card-container">
+      <h2>Player 1's Cards</h2>
+      <div id="player1-cards" class="card-hand"></div>
+      <button id="draw-card-player1">Draw Card (P1)</button>
+
+      <h2>Player 2's Cards</h2>
+      <div id="player2-cards" class="card-hand"></div>
+      <button id="draw-card-player2">Draw Card (P2)</button>
+    </div>
+  </div>
+
+  <script>
+    // Create the Chess and Chessboard instances
+    let chess = new Chess();
+    let board = Chessboard('board', {
+      draggable: true,
+      position: 'start',
+      onDrop: handleMove, // Called when a piece is dropped
+    });
+
+    // Basic turn tracking: 'w' => Player1, 'b' => Player2
+    let currentTurn = 'w'; 
+
+    // Simple card deck. You can expand this as you please.
+    let deck = [
+      { name: 'Promote Pawn', effect: promotePawn },
+      { name: 'Double Step', effect: doubleStepPawn },
+      { name: 'Shielded Pawn', effect: shieldPawn },
+      // Add more cards here if you want
+    ];
+
+    // Shuffle deck for randomness (Fisher-Yates)
+    function shuffleDeck(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    }
+    shuffleDeck(deck); // Shuffle once on load
+
+    // Card hands
+    let player1Hand = [];
+    let player2Hand = [];
+
+    // Render cards onto the page
+    function renderCards() {
+      const player1CardsDiv = document.getElementById('player1-cards');
+      const player2CardsDiv = document.getElementById('player2-cards');
+
+      // Player1
+      player1CardsDiv.innerHTML = player1Hand
+        .map((card, index) => 
+          `<div class="card" onclick="playCard(player1Hand, ${index})">${card.name}</div>`
+        )
+        .join('');
+
+      // Player2
+      player2CardsDiv.innerHTML = player2Hand
+        .map((card, index) => 
+          `<div class="card" onclick="playCard(player2Hand, ${index})">${card.name}</div>`
+        )
+        .join('');
+    }
+
+    // Draw a card
+    function drawCard(playerHand) {
+      if (deck.length > 0) {
+        let drawnCard = deck.pop();
+        playerHand.push(drawnCard);
+        renderCards();
+      } else {
+        alert("Deck is empty!");
+      }
+    }
+
+    // Play a card
+    function playCard(playerHand, index) {
+      let card = playerHand.splice(index, 1)[0];
+      card.effect(); // Run the effect
+      renderCards();
+    }
+
+    // -- CARD EFFECTS --
+    function promotePawn() {
+      if (chess.game_over()) {
+        alert("Game is over, can't play this card.");
+        return;
+      }
+      // Only the current player's pawns are eligible
+      let activeColor = currentTurn;
+      alert("Select a pawn to promote (any rank).");
+      // In a real version, you’d highlight eligible pawns, etc.
+      // For now, we just prompt for a square:
+      let square = prompt("Enter the square (e.g., 'a2') of the pawn you want to promote:");
+      if (!square) return;
+
+      // Validate there's a pawn of correct color on that square
+      let pieceObj = chess.get(square);
+      if (pieceObj && pieceObj.type === 'p' && pieceObj.color === activeColor) {
+        // Prompt for new piece type
+        let newPiece = prompt("Choose new piece type: n (knight), b (bishop), r (rook). Default is 'n'");
+        if (!['n','b','r'].includes(newPiece)) {
+          newPiece = 'n'; 
+        }
+        // We forcibly remove the old pawn and add the new piece in chess.js
+        chess.remove(square);
+        chess.put({ type: newPiece, color: activeColor }, square);
+        board.position(chess.fen());
+      } else {
+        alert("No valid pawn at that square!");
+      }
+    }
+
+    function doubleStepPawn() {
+      if (chess.game_over()) {
+        alert("Game is over, can't play this card.");
+        return;
+      }
+      alert("Select a pawn to move two squares forward (even if it's not the first move).");
+      let square = prompt("Enter the square (e.g., 'a2') of the pawn you want to double-step:");
+      if (!square) return;
+
+      let pieceObj = chess.get(square);
+      if (!pieceObj || pieceObj.type !== 'p' || pieceObj.color !== currentTurn) {
+        alert("Invalid selection: that’s not your pawn!");
+        return;
+      }
+
+      // Figure out target square based on color
+      let file = square.charAt(0); // 'a', 'b', ...
+      let rank = parseInt(square.charAt(1));
+
+      // White moves up rank, black moves down rank
+      let newRank = (currentTurn === 'w') ? rank + 2 : rank - 2;
+      let targetSquare = file + newRank;
+
+      // Check if it's a legal empty square
+      if (!chess.get(targetSquare)) {
+        // Remove old pawn
+        chess.remove(square);
+        // Place it in the new spot
+        chess.put({ type: 'p', color: currentTurn }, targetSquare);
+        board.position(chess.fen());
+      } else {
+        alert("Target square isn't empty!");
+      }
+    }
+
+    // Track shielded squares for one turn
+    let shieldedSquares = []; 
+    function shieldPawn() {
+      if (chess.game_over()) {
+        alert("Game is over, can't play this card.");
+        return;
+      }
+      alert("Select a pawn to shield for one turn (cannot be captured this turn).");
+      let square = prompt("Enter the square (e.g., 'a2') of the pawn you want to shield:");
+      let pieceObj = chess.get(square);
+      if (!pieceObj || pieceObj.type !== 'p' || pieceObj.color !== currentTurn) {
+        alert("Invalid selection: that’s not your pawn!");
+        return;
+      }
+      shieldedSquares.push(square);
+      alert("Pawn on " + square + " is shielded for this turn!");
+    }
+
+    // Chess Move Handler
+    function handleMove(source, target) {
+      let move = chess.move({ from: source, to: target });
+      if (move === null) {
+        console.log("Illegal move!");
+        return 'snapback';
+      } else {
+        console.log("Move:", move);
+
+        // Check if a piece was captured. If yes, see if it's on a shielded square
+        if (move.captured) {
+          let capturedSquare = target;
+          if (shieldedSquares.includes(capturedSquare)) {
+            // Undo the move because that pawn was shielded
+            alert("Shield blocked the capture!");
+            chess.undo(); 
+            board.position(chess.fen());
+            return 'snapback';
+          }
+        }
+
+        endTurn(); // Switch to the other player
+      }
+    }
+
+    // Called after a successful move
+    function endTurn() {
+      // Clear shield after each turn
+      shieldedSquares = [];
+
+      // Switch current turn color
+      currentTurn = (currentTurn === 'w') ? 'b' : 'w';
+
+      // Could do extra logic here, like check for checkmate or special events
+      if (chess.in_checkmate()) {
+        alert("Checkmate! " + (currentTurn === 'w' ? 'Black' : 'White') + " wins!");
+      } else if (chess.in_stalemate()) {
+        alert("Stalemate! It's a draw.");
+      }
+    }
+
+    // Attach event listeners for draw buttons
+    document.getElementById('draw-card-player1').addEventListener('click', () => {
+      // Only allow Player1 (white) to draw on their turn
+      if (currentTurn === 'w') {
+        drawCard(player1Hand);
+      } else {
+        alert("It's not your turn, Player1!");
+      }
+    });
+    document.getElementById('draw-card-player2').addEventListener('click', () => {
+      // Only allow Player2 (black) to draw on their turn
+      if (currentTurn === 'b') {
+        drawCard(player2Hand);
+      } else {
+        alert("It's not your turn, Player2!");
+      }
+    });
+
+    // Initial render
+    renderCards();
+  </script>
+</body>
+</html>
